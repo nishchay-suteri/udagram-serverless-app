@@ -17,6 +17,7 @@ provider:
     environment:
         GROUPS_TABLE: Groups-${self:provider.stage}
         IMAGES_TABLE: Images-${self:provider.stage}
+        IMAGE_ID_INDEX: ImageIdIndex
 
     iamRoleStatements:
         - Effect: Allow
@@ -29,6 +30,10 @@ provider:
           Action:
               - dynamodb:Query
           Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.IMAGES_TABLE}
+        - Effect: Allow
+          Action:
+              - dynamodb:Query
+          Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.IMAGES_TABLE}/index/${self:provider.environment.IMAGE_ID_INDEX}
 
 custom:
     webpack:
@@ -74,6 +79,14 @@ functions:
                   path: groups/{groupId}/images
                   cors: true
 
+    GetImage:
+        handler: src/lambda/http/getImage.handler
+        events:
+            - http:
+                  method: get
+                  path: images/{imageId}
+                  cors: true
+
 resources:
     Resources:
         GroupsDynamoDBTable:
@@ -84,7 +97,7 @@ resources:
                       AttributeType: S
                 KeySchema:
                     - AttributeName: id
-                      KeyType: HASH
+                      KeyType: HASH # HASH -> PRIMARY KEY
                 BillingMode: PAY_PER_REQUEST
                 TableName: ${self:provider.environment.GROUPS_TABLE}
         ImagesDynamoDBTable:
@@ -95,11 +108,20 @@ resources:
                       AttributeType: S
                     - AttributeName: timestamp
                       AttributeType: S
+                    - AttributeName: imageId
+                      AttributeType: S
                 KeySchema:
                     - AttributeName: groupId
                       KeyType: HASH
                     - AttributeName: timestamp
-                      KeyType: RANGE
+                      KeyType: RANGE # RANGE -> SORT KEY
+                GlobalSecondaryIndexes:
+                    - IndexName: ${self:provider.environment.IMAGE_ID_INDEX}
+                      KeySchema:
+                          - AttributeName: imageId
+                            KeyType: HASH
+                      Projection:
+                          ProjectionType: ALL # What attributes to copyto global seconday index
                 BillingMode: PAY_PER_REQUEST
                 TableName: ${self:provider.environment.IMAGES_TABLE}
         RequestBodyValidator:
@@ -107,6 +129,6 @@ resources:
             Properties:
                 Name: "request-body-validator"
                 RestApiId:
-                    Ref: ApiGatewayRestApi
+                    Ref: ApiGatewayRestApi # API Gateway build using serverless
                 ValidateRequestBody: true
                 ValidateRequestParameters: false
