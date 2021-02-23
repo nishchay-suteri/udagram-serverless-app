@@ -137,6 +137,8 @@ functions:
             - websocket:
                   route: $disconnect
     SyncWithElasticsearch:
+        environment:
+            ES_ENDPOINT: !GetAtt ImagesSearch.DomainEndpoint
         handler: src/lambda/dynamodb/elasticSearchSync.handler
         events:
             - stream:
