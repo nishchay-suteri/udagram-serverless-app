@@ -51,6 +51,7 @@ provider:
               - dynamodb:DeleteItem
           Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CONNECTIONS_TABLE}
 custom:
+    topicName: imagesTopic-${self:provider.stage} # since this variable is not used in lambda function, instead of defining in environment variable, defined here
     webpack:
         webpackConfig: ./webpack.config.js
         includeModules: true
@@ -124,6 +125,16 @@ functions:
             API_ID:
                 Ref: WebsocketsApi
         handler: src/lambda/s3/sendNotifications.handler
+        events:
+            - sns:
+                  arn:
+                      Fn::Join:
+                          - ":"
+                          - - arn:aws:sns
+                            - Ref: AWS::Region
+                            - Ref: AWS::AccountId
+                            - ${self:custom.topicName}
+                  topicName: ${self:custom.topicName}
 
     ConnectHandler:
         handler: src/lambda/websocket/connect.handler
@@ -136,14 +147,15 @@ functions:
         events:
             - websocket:
                   route: $disconnect
-    SyncWithElasticsearch:
-        environment:
-            ES_ENDPOINT: !GetAtt ImagesSearch.DomainEndpoint
-        handler: src/lambda/dynamodb/elasticSearchSync.handler
-        events:
-            - stream:
-                  type: dynamodb
-                  arn: !GetAtt ImagesDynamoDBTable.StreamArn
+    # uncomment for elasticSearch Functionality
+    # SyncWithElasticsearch:
+    #     environment:
+    #         ES_ENDPOINT: !GetAtt ImagesSearch.DomainEndpoint
+    #     handler: src/lambda/dynamodb/elasticSearchSync.handler
+    #     events:
+    #         - stream:
+    #               type: dynamodb
+    #               arn: !GetAtt ImagesDynamoDBTable.StreamArn
 
 resources:
     Resources:
@@ -207,12 +219,13 @@ resources:
                 ValidateRequestParameters: false
         AttachmentsBucket:
             Type: AWS::S3::Bucket
+            DependsOn: SNSTopicPolicy
             Properties:
                 BucketName: ${self:provider.environment.IMAGES_S3_BUCKET}
                 NotificationConfiguration:
-                    LambdaConfigurations:
-                        - Event: s3:ObjectCreated:*
-                          Function: !GetAtt SendUploadNotificationsLambdaFunction.Arn
+                    TopicConfigurations:
+                        - Event: s3:ObjectCreated:Put
+                          Topic: !Ref ImagesTopic
                 CorsConfiguration:
                     CorsRules:
                         - AllowedOrigins:
@@ -249,26 +262,49 @@ resources:
                           Action: "s3:GetObject"
                           Resource: "arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}/*"
                 Bucket: !Ref AttachmentsBucket
-        ImagesSearch:
-            Type: AWS::Elasticsearch::Domain
+        SNSTopicPolicy:
+            Type: AWS::SNS::TopicPolicy
             Properties:
-                ElasticsearchVersion: "6.3"
-                DomainName: images-search-${self:provider.stage}
-                ElasticsearchClusterConfig:
-                    DedicatedMasterEnabled: false
-                    InstanceCount: "1"
-                    ZoneAwarenessEnabled: false
-                    InstanceType: t2.small.elasticsearch
-                EBSOptions:
-                    EBSEnabled: true
-                    Iops: 0
-                    VolumeSize: 10
-                    VolumeType: "gp2"
-                AccessPolicies:
+                PolicyDocument:
                     Version: "2012-10-17"
                     Statement:
                         - Effect: Allow
                           Principal:
-                              AWS: "arn:aws:iam::688282928763:user/serverless"
-                          Action: "es:ESHttp*"
-                          Resource: "arn:aws:es:${self:provider.region}:688282928763:domain/images-search-${self:provider.stage}/*"
+                              AWS: "*"
+                          Action: sns:Publish
+                          Resource: !Ref ImagesTopic
+                          Condition:
+                              ArnLike:
+                                  AWS:SourceArn: arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}
+                Topics:
+                    - !Ref ImagesTopic
+
+        ImagesTopic:
+            Type: AWS::SNS::Topic
+            Properties:
+                DisplayName: Image Bucket Topic
+                TopicName: ${self:custom.topicName}
+        # Uncomment following to use ElasticSearch Resource
+        # ImagesSearch:
+        #     Type: AWS::Elasticsearch::Domain
+        #     Properties:
+        #         ElasticsearchVersion: "6.3"
+        #         DomainName: images-search-${self:provider.stage}
+        #         ElasticsearchClusterConfig:
+        #             DedicatedMasterEnabled: false
+        #             InstanceCount: "1"
+        #             ZoneAwarenessEnabled: false
+        #             InstanceType: t2.small.elasticsearch
+        #         EBSOptions:
+        #             EBSEnabled: true
+        #             Iops: 0
+        #             VolumeSize: 10
+        #             VolumeType: "gp2"
+        #         AccessPolicies:
+        #             Version: "2012-10-17"
+        #             Statement:
+        #                 - Effect: Allow
+        #                   Principal:
+        #                       AWS: "arn:aws:iam::688282928763:user/serverless"
+        #                   Action: "es:ESHttp*"
+        #                   Resource: "arn:aws:es:${self:provider.region}:688282928763:domain/images-search-${self:provider.stage}/*"
