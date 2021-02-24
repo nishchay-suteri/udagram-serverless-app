@@ -10,6 +10,7 @@
     "@types/uuid": "^8.3.0",
     "elasticsearch": "^16.7.2",
     "http-aws-es": "^6.0.0",
+    "jimp": "^0.16.1",
     "source-map-support": "^0.5.10",
     "uuid": "^8.3.2"
   },

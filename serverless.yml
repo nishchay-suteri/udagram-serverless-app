@@ -21,6 +21,7 @@ provider:
         IMAGE_ID_INDEX: ImageIdIndex
         IMAGES_S3_BUCKET: serverless-udagram-suteri-images-${self:provider.stage}
         SIGNED_URL_EXPIRATION: 300
+        THUMBNAILS_S3_BUCKET: serverless-udagram-suteri-thumbnail-${self:provider.stage}
 
     iamRoleStatements:
         - Effect: Allow
@@ -43,6 +44,10 @@ provider:
               - s3:PutObject
               - s3:GetObject
           Resource: arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}/*
+        - Effect: Allow
+          Action:
+              - s3:PutObject
+          Resource: arn:aws:s3:::${self:provider.environment.THUMBNAILS_S3_BUCKET}/*
         - Effect: Allow
           Action:
               - dynamodb:Scan
@@ -125,6 +130,18 @@ functions:
             API_ID:
                 Ref: WebsocketsApi
         handler: src/lambda/s3/sendNotifications.handler
+        events:
+            - sns:
+                  arn:
+                      Fn::Join:
+                          - ":"
+                          - - arn:aws:sns
+                            - Ref: AWS::Region
+                            - Ref: AWS::AccountId
+                            - ${self:custom.topicName}
+                  topicName: ${self:custom.topicName}
+    ResizeImage:
+        handler: src/lambda/s3/resizeImage.handler
         events:
             - sns:
                   arn:
@@ -284,6 +301,10 @@ resources:
             Properties:
                 DisplayName: Image Bucket Topic
                 TopicName: ${self:custom.topicName}
+        ThumbnailsBucket:
+            Type: AWS::S3::Bucket
+            Properties:
+                BucketName: ${self:provider.environment.THUMBNAILS_S3_BUCKET}
         # Uncomment following to use ElasticSearch Resource
         # ImagesSearch:
         #     Type: AWS::Elasticsearch::Domain
