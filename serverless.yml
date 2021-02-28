@@ -22,7 +22,8 @@ provider:
         IMAGES_S3_BUCKET: serverless-udagram-suteri-images-${self:provider.stage}
         SIGNED_URL_EXPIRATION: 300
         THUMBNAILS_S3_BUCKET: serverless-udagram-suteri-thumbnail-${self:provider.stage}
-        AUTH_0_SECRET: not-a-good-way-to-store-secret # TODO: Change this to more secure way
+        AUTH_0_SECRET_ID: Auth0Secret-${self:provider.stage}
+        AUTH_0_SECRET_FIELD: auth0Secret
 
     iamRoleStatements:
         - Effect: Allow
@@ -56,6 +57,14 @@ provider:
               - dynamodb:GetItem
               - dynamodb:DeleteItem
           Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CONNECTIONS_TABLE}
+        - Effect: Allow
+          Action:
+              - secretsmanager:GetSecretValue
+          Resource: !Ref Auth0Secret
+        - Effect: Allow
+          Action:
+              - kms:Decrypt
+          Resource: !GetAtt KMSKey.Arn
 custom:
     topicName: imagesTopic-${self:provider.stage} # since this variable is not used in lambda function, instead of defining in environment variable, defined here
     webpack:
@@ -321,6 +330,39 @@ resources:
             Type: AWS::S3::Bucket
             Properties:
                 BucketName: ${self:provider.environment.THUMBNAILS_S3_BUCKET}
+
+        KMSKey:
+            Type: AWS::KMS::Key
+            Properties:
+                Description: KMS key to encrypt Auth0 secret
+                KeyPolicy:
+                    Version: "2012-10-17"
+                    Id: key-default-1
+                    Statement:
+                        - Sid: Allow administration of the key
+                          Effect: Allow
+                          Principal:
+                              AWS:
+                                  Fn::Join:
+                                      - ":"
+                                      - - "arn:aws:iam:"
+                                        - Ref: AWS::AccountId
+                                        - "root"
+                          Action:
+                              - "kms:*"
+                          Resource: "*"
+        KMSKeyAlias:
+            Type: AWS::KMS::Alias
+            Properties:
+                AliasName: alias/auth0Key-${self:provider.stage}
+                TargetKeyId: !Ref KMSKey
+
+        Auth0Secret:
+            Type: AWS::SecretsManager::Secret
+            Properties:
+                Name: ${self:provider.environment.AUTH_0_SECRET_ID}
+                Description: Auth0 secret
+                KmsKeyId: !Ref KMSKey
         # Uncomment following to use ElasticSearch Resource
         # ImagesSearch:
         #     Type: AWS::Elasticsearch::Domain
