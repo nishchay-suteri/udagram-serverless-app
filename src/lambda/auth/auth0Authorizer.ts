@@ -5,14 +5,19 @@ import {
 } from "aws-lambda";
 import "source-map-support/register";
 
+import { verify } from "jsonwebtoken";
+import { JwtToken } from "../../auth/jwtToken";
+
+const auth0Secret = process.env.AUTH_0_SECRET;
+
 export const handler: CustomAuthorizerHandler = async (
     event: CustomAuthorizerEvent
 ): Promise<CustomAuthorizerResult> => {
     try {
-        verifyToken(event.authorizationToken);
+        const decodedToken = verifyToken(event.authorizationToken);
         console.log("User was authorized");
         return {
-            principalId: "user",
+            principalId: decodedToken.sub,
             policyDocument: {
                 Version: "2012-10-17",
                 Statement: [
@@ -42,7 +47,7 @@ export const handler: CustomAuthorizerHandler = async (
     }
 };
 
-const verifyToken = (authHeader: string) => {
+const verifyToken = (authHeader: string): JwtToken => {
     if (!authHeader) {
         throw new Error("No authorization header");
     }
@@ -51,8 +56,8 @@ const verifyToken = (authHeader: string) => {
     }
     const split = authHeader.split(" ");
     const token = split[1];
-    if (token !== "123") {
-        throw new Error("Invalid Token");
-    }
+
+    return verify(token, auth0Secret) as JwtToken;
+
     // a reqquest has been authorized
 };

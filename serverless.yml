@@ -22,6 +22,7 @@ provider:
         IMAGES_S3_BUCKET: serverless-udagram-suteri-images-${self:provider.stage}
         SIGNED_URL_EXPIRATION: 300
         THUMBNAILS_S3_BUCKET: serverless-udagram-suteri-thumbnail-${self:provider.stage}
+        AUTH_0_SECRET: not-a-good-way-to-store-secret # TODO: Change this to more secure way
 
     iamRoleStatements:
         - Effect: Allow
