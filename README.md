@@ -8,3 +8,7 @@ A Serverless application for images sharing.
 -   AWS Dynamo DB
 -   AWS API Gateway
 -   Serverless Framework
+
+# How to deploy App
+
+Run `sls deploy -v`
